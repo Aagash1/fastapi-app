@@ -4,7 +4,11 @@ import uuid
 import time
 import os
 from fastapi import FastAPI, Request
-from prometheus_fastapi_instrumentator import Instrumentator
+try:
+    from prometheus_fastapi_instrumentator import Instrumentator
+    _PROM_AVAILABLE = True
+except ImportError:
+    _PROM_AVAILABLE = False
 
 
 # ── Loki handler (direct push, like pino-loki) ───────────────────────
@@ -38,7 +42,8 @@ logger.propagate = False
 
 # ── App ──────────────────────────────────────────────────────────────
 app = FastAPI()
-Instrumentator().instrument(app).expose(app)
+if _PROM_AVAILABLE:
+    Instrumentator().instrument(app).expose(app)
 
 
 @app.middleware("http")
