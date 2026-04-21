@@ -4,6 +4,7 @@ import uuid
 import time
 import os
 from fastapi import FastAPI, Request
+from prometheus_fastapi_instrumentator import Instrumentator
 
 
 # ── Loki handler (direct push, like pino-loki) ───────────────────────
@@ -37,6 +38,7 @@ logger.propagate = False
 
 # ── App ──────────────────────────────────────────────────────────────
 app = FastAPI()
+Instrumentator().instrument(app).expose(app)
 
 
 @app.middleware("http")
