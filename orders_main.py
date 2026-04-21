@@ -2,6 +2,7 @@ import logging
 import logging_loki
 import uuid
 import time
+import os
 from fastapi import FastAPI, Request
 
 
@@ -16,19 +17,21 @@ class LokiHandler(logging_loki.LokiHandler):
         super().emit(record)
 
 
-loki_handler = LokiHandler(
-    url="http://loki-gateway.loki.svc.cluster.local/loki/api/v1/push",
-    tags={"service": "fastapi-orders", "env": "development"},
-    version="1",
-)
-
-# Keep stdout as fallback for local dev
 stream_handler = logging.StreamHandler()
 
 logger = logging.getLogger("fastapi-orders")
 logger.setLevel(logging.INFO)
-logger.addHandler(loki_handler)
 logger.addHandler(stream_handler)
+
+# Only push to Loki when running inside the cluster
+if os.getenv("ENABLE_LOKI", "false").lower() == "true":
+    loki_handler = LokiHandler(
+        url=os.getenv("LOKI_URL", "http://loki-gateway.loki.svc.cluster.local/loki/api/v1/push"),
+        tags={"service": "fastapi-orders", "env": "development"},
+        version="1",
+    )
+    logger.addHandler(loki_handler)
+
 logger.propagate = False
 
 
@@ -42,20 +45,19 @@ async def correlation_and_logging(request: Request, call_next):
     correlation_id = str(uuid.uuid4())
     request.state.correlation_id = correlation_id
 
+    # Set child logger BEFORE call_next so route handlers can access request.state.log
+    child = logging.LoggerAdapter(logger, {"correlationId": correlation_id})
+    request.state.log = child
+
     start = time.time()
     try:
         response = await call_next(request)
         duration_ms = round((time.time() - start) * 1000, 2)
         response.headers["X-Correlation-ID"] = correlation_id
-
-        # Child logger with correlationId (like logger.child({ correlationId }))
-        child = logging.LoggerAdapter(logger, {"correlationId": correlation_id})
-        request.state.log = child  # available in route handlers as request.state.log
         child.info(f"request_completed {request.method} {request.url.path} {response.status_code} {duration_ms}ms")
         return response
     except Exception as exc:
         duration_ms = round((time.time() - start) * 1000, 2)
-        child = logging.LoggerAdapter(logger, {"correlationId": correlation_id})
         child.error(f"request_error: {str(exc)} {request.method} {request.url.path} {duration_ms}ms")
         raise
 
