@@ -16,8 +16,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Build Docker image (validation only)
+      - name: Build fastapi-app image (validation only)
         run: docker build -t fastapi-app:pr-${{ github.event.pull_request.number }} .
+
+      - name: Build fastapi-orders image (validation only)
+        run: docker build -f Dockerfile.orders -t fastapi-orders:pr-${{ github.event.pull_request.number }} .
 
   # ─── Job 2: Merge to main — build + push + raise PR ───────────────
   build-push-deploy:
@@ -38,19 +41,24 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Build Docker image
-        run: |
-          docker build -t ${{ secrets.DOCKER_USERNAME }}/fastapi-app:${{ steps.version.outputs.tag }} .
+      - name: Build fastapi-app image
+        run: docker build -t ${{ secrets.DOCKER_USERNAME }}/fastapi-app:${{ steps.version.outputs.tag }} .
 
-      - name: Push Docker image with version tag
-        run: |
-          docker push ${{ secrets.DOCKER_USERNAME }}/fastapi-app:${{ steps.version.outputs.tag }}
+      - name: Push fastapi-app image
+        run: docker push ${{ secrets.DOCKER_USERNAME }}/fastapi-app:${{ steps.version.outputs.tag }}
 
-      - name: Print pushed image version
+      - name: Build fastapi-orders image
+        run: docker build -f Dockerfile.orders -t ${{ secrets.DOCKER_USERNAME }}/fastapi-orders:${{ steps.version.outputs.tag }} .
+
+      - name: Push fastapi-orders image
+        run: docker push ${{ secrets.DOCKER_USERNAME }}/fastapi-orders:${{ steps.version.outputs.tag }}
+
+      - name: Print pushed image versions
         run: |
           echo "==========================================="
-          echo "Docker image successfully pushed:"
+          echo "Docker images successfully pushed:"
           echo "  ${{ secrets.DOCKER_USERNAME }}/fastapi-app:${{ steps.version.outputs.tag }}"
+          echo "  ${{ secrets.DOCKER_USERNAME }}/fastapi-orders:${{ steps.version.outputs.tag }}"
           echo "==========================================="
 
       - name: Checkout deploy repository
@@ -60,9 +68,10 @@ jobs:
           token: ${{ secrets.GH_PAT }}
           path: deploy-repo
 
-      - name: Update image tag in deployment.yaml
+      - name: Update image tags in deployment manifests
         run: |
           sed -i "s|\(image: .*/fastapi-app:\).*|\1${{ steps.version.outputs.tag }}|" deploy-repo/deployment.yaml
+          sed -i "s|\(image: .*/fastapi-orders:\).*|\1${{ steps.version.outputs.tag }}|" deploy-repo/deployment-orders.yaml
 
       - name: Raise PR to deploy repository
         env:
@@ -73,7 +82,7 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           BRANCH="update-image-${{ steps.version.outputs.tag }}"
           git checkout -b $BRANCH
-          git add deployment.yaml
+          git add deployment.yaml deployment-orders.yaml
           git commit -m "chore: update image tag to ${{ steps.version.outputs.tag }}"
           git push origin $BRANCH
           gh pr create \
@@ -81,6 +90,6 @@ jobs:
             --base main \
             --head $BRANCH \
             --title "chore: update image tag to ${{ steps.version.outputs.tag }}" \
-            --body "Automated PR: update container image to \`${{ secrets.DOCKER_USERNAME }}/fastapi-app:${{ steps.version.outputs.tag }}\`"
+            --body "Automated PR: update container images to \`${{ steps.version.outputs.tag }}\`"
 
  
