@@ -26,7 +26,7 @@ logger.addHandler(stream_handler)
 # Only push to Loki when running inside the cluster
 if os.getenv("ENABLE_LOKI", "false").lower() == "true":
     loki_handler = LokiHandler(
-        url=os.getenv("LOKI_URL", "http://loki-gateway.loki.svc.cluster.local/loki/api/v1/push"),
+        url=os.getenv("LOKI_URL", "http://loki:3100/loki/api/v1/push"),
         tags={"service": "fastapi-app", "env": "development"},
         version="1",
     )
