@@ -18,14 +18,14 @@ class LokiHandler(logging_loki.LokiHandler):
 
 loki_handler = LokiHandler(
     url="http://loki-gateway.loki.svc.cluster.local/loki/api/v1/push",
-    tags={"service": "fastapi-app", "env": "development"},
+    tags={"service": "fastapi-orders", "env": "development"},
     version="1",
 )
 
 # Keep stdout as fallback for local dev
 stream_handler = logging.StreamHandler()
 
-logger = logging.getLogger("fastapi-app")
+logger = logging.getLogger("fastapi-orders")
 logger.setLevel(logging.INFO)
 logger.addHandler(loki_handler)
 logger.addHandler(stream_handler)
@@ -60,13 +60,17 @@ async def correlation_and_logging(request: Request, call_next):
         raise
 
 
-@app.get("/")
-def hello_world(request: Request):
-    request.state.log.info("hello_world_called")
-    return {"message": "Hello, World!"}
+from fastapi import Body
+from fastapi.responses import JSONResponse
 
 
-@app.get("/status")
-def status(request: Request):
-    request.state.log.info("status_checked")
-    return {"status": "ok", "version": "1.0.0"}
+@app.get("/orders")
+def list_orders(request: Request):
+    request.state.log.info("list_orders_called")
+    return {"orders": [{"id": "ord_001", "customer": "Alice", "status": "DELIVERED"}, {"id": "ord_002", "customer": "Bob", "status": "SHIPPED"}]}
+
+
+@app.get("/orders/{order_id}")
+def get_order(order_id: str, request: Request):
+    request.state.log.info(f"order_fetched orderId={order_id}")
+    return {"id": order_id, "customer": "Alice", "items": ["laptop", "mouse"], "status": "DELIVERED"}
